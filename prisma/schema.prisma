@@ -1,0 +1,94 @@
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+/// Raw webhook events — the immutable event log.
+/// Every webhook delivery is stored here before processing.
+model WebhookEvent {
+  id         String   @id @default(cuid())
+  eventType  String   @map("event_type")   // e.g. "workflow_run", "workflow_job"
+  action     String                         // e.g. "completed", "queued", "in_progress"
+  deliveryId String?  @unique @map("delivery_id") // X-GitHub-Delivery header (dedup)
+  receivedAt DateTime @default(now()) @map("received_at")
+  payload    Json                           // Full webhook payload
+
+  @@index([eventType, action])
+  @@index([receivedAt])
+  @@map("webhook_events")
+}
+
+/// A GitHub Actions workflow run (top-level execution).
+model WorkflowRun {
+  id          BigInt    @id                  // GitHub's run ID
+  org         String                         // Organization or user
+  repo        String                         // Repository name
+  workflow    String                         // Workflow name
+  workflowId  Int       @map("workflow_id")  // GitHub's workflow ID
+  headBranch  String?   @map("head_branch")
+  headSha     String?   @map("head_sha")
+  event       String?                        // Trigger event (push, pull_request, etc.)
+  status      String                         // queued, in_progress, completed
+  conclusion  String?                        // success, failure, cancelled, skipped, etc.
+  runNumber   Int       @map("run_number")
+  runAttempt  Int       @default(1) @map("run_attempt")
+  htmlUrl     String?   @map("html_url")
+  startedAt   DateTime? @map("started_at")
+  completedAt DateTime? @map("completed_at")
+  updatedAt   DateTime  @updatedAt @map("updated_at")
+  rawPayload  Json?     @map("raw_payload")  // Latest webhook payload
+
+  jobs        WorkflowJob[]
+
+  @@index([org, repo])
+  @@index([status])
+  @@index([startedAt])
+  @@index([completedAt])
+  @@index([org, startedAt])
+  @@map("workflow_runs")
+}
+
+/// An individual job within a workflow run.
+model WorkflowJob {
+  id          BigInt    @id                  // GitHub's job ID
+  runId       BigInt    @map("run_id")
+  name        String
+  status      String                         // queued, in_progress, completed
+  conclusion  String?                        // success, failure, cancelled, skipped
+  startedAt   DateTime? @map("started_at")
+  completedAt DateTime? @map("completed_at")
+  runnerId    Int?      @map("runner_id")
+  runnerName  String?   @map("runner_name")
+  labels      String[]  @default([])         // Runner labels
+  steps       Json?                          // Step details from payload
+  htmlUrl     String?   @map("html_url")
+  updatedAt   DateTime  @updatedAt @map("updated_at")
+
+  run         WorkflowRun @relation(fields: [runId], references: [id], onDelete: Cascade)
+
+  @@index([runId])
+  @@index([status])
+  @@index([startedAt])
+  @@map("workflow_jobs")
+}
+
+/// Pre-computed snapshots for fast time-range queries.
+/// Built periodically (e.g. every 5 minutes) to avoid expensive aggregation.
+model Snapshot {
+  id        String   @id @default(cuid())
+  org       String
+  timestamp DateTime
+  data      Json     // Aggregated state at this point in time:
+                     // { runs: { queued: N, in_progress: N, completed: N },
+                     //   success_rate: 0.95, avg_duration_s: 120, ... }
+
+  createdAt DateTime @default(now()) @map("created_at")
+
+  @@unique([org, timestamp])
+  @@index([org, timestamp])
+  @@map("snapshots")
+}
