@@ -2,6 +2,7 @@ import { Worker, Job } from "bullmq";
 import { createRedisConnection } from "./redis";
 import { WEBHOOK_QUEUE_NAME, type WebhookJobData } from "./queue";
 import { prisma } from "../db";
+import type { WSEvent } from "../types";
 
 /**
  * Process incoming webhook events:
@@ -48,7 +49,7 @@ async function processWorkflowRun(payload: Record<string, unknown>) {
     ? repoFullName.split("/")
     : ["unknown", "unknown"];
 
-  await prisma.workflowRun.upsert({
+  const workflowRun = await prisma.workflowRun.upsert({
     where: { id: BigInt(run.id as number) },
     create: {
       id: BigInt(run.id as number),
@@ -74,16 +75,49 @@ async function processWorkflowRun(payload: Record<string, unknown>) {
       completedAt: run.updated_at ? new Date(run.updated_at as string) : null,
       rawPayload: payload,
     },
+    include: {
+      _count: { select: { jobs: true } },
+    },
   });
 
   console.log(`[Worker] Upserted workflow run ${run.id} (${run.status})`);
+
+  // Publish real-time event
+  const eventType = run.status === "queued" 
+    ? "run:queued" 
+    : run.status === "in_progress" 
+    ? "run:in_progress" 
+    : "run:completed";
+
+  await publishEvent({
+    type: eventType as WSEvent["type"],
+    timestamp: new Date().toISOString(),
+    data: {
+      id: workflowRun.id.toString(),
+      org: workflowRun.org,
+      repo: workflowRun.repo,
+      workflow: workflowRun.workflow,
+      headBranch: workflowRun.headBranch,
+      status: workflowRun.status as any,
+      conclusion: workflowRun.conclusion as any,
+      runNumber: workflowRun.runNumber,
+      startedAt: workflowRun.startedAt?.toISOString() || null,
+      completedAt: workflowRun.completedAt?.toISOString() || null,
+      durationSeconds: workflowRun.startedAt && workflowRun.completedAt
+        ? Math.round((workflowRun.completedAt.getTime() - workflowRun.startedAt.getTime()) / 1000)
+        : null,
+      htmlUrl: workflowRun.htmlUrl,
+      jobCount: workflowRun._count.jobs,
+    },
+  });
+}
 }
 
 async function processWorkflowJob(payload: Record<string, unknown>) {
   const job = payload.workflow_job as Record<string, unknown>;
   if (!job) return;
 
-  await prisma.workflowJob.upsert({
+  const workflowJob = await prisma.workflowJob.upsert({
     where: { id: BigInt(job.id as number) },
     create: {
       id: BigInt(job.id as number),
@@ -110,6 +144,43 @@ async function processWorkflowJob(payload: Record<string, unknown>) {
   });
 
   console.log(`[Worker] Upserted workflow job ${job.id} (${job.status})`);
+
+  // Publish real-time event
+  const eventType = job.status === "queued"
+    ? "job:queued"
+    : job.status === "in_progress"
+    ? "job:in_progress"
+    : "job:completed";
+
+  await publishEvent({
+    type: eventType as WSEvent["type"],
+    timestamp: new Date().toISOString(),
+    data: {
+      id: workflowJob.id.toString(),
+      name: workflowJob.name,
+      status: workflowJob.status as any,
+      conclusion: workflowJob.conclusion as any,
+      startedAt: workflowJob.startedAt?.toISOString() || null,
+      completedAt: workflowJob.completedAt?.toISOString() || null,
+      durationSeconds: workflowJob.startedAt && workflowJob.completedAt
+        ? Math.round((workflowJob.completedAt.getTime() - workflowJob.startedAt.getTime()) / 1000)
+        : null,
+      runnerName: workflowJob.runnerName,
+      labels: workflowJob.labels,
+    },
+  });
+}
+}
+
+// --- Redis publisher for real-time events ---
+const publisher = createRedisConnection();
+
+/**
+ * Publish a real-time event to Redis for SSE subscribers.
+ */
+async function publishEvent(event: WSEvent) {
+  const channel = event.type.replace(":", ":");
+  await publisher.publish(`workflow:${channel}`, JSON.stringify(event));
 }
 
 // --- Start worker ---

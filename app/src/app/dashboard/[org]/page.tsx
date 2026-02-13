@@ -1,6 +1,7 @@
 import { TimeSlider } from "@/components/TimeSlider";
 import { RunList } from "@/components/RunList";
 import { StatsBar } from "@/components/StatsBar";
+import { LiveIndicator } from "@/components/LiveIndicator";
 
 interface OrgDashboardProps {
   params: Promise<{ org: string }>;
@@ -20,12 +21,7 @@ export default async function OrgDashboard({ params }: OrgDashboardProps) {
           <h1 className="text-2xl font-bold">{org}</h1>
           <p className="text-sm text-gh-text-secondary">Workflow Timeline</p>
         </div>
-        <div className="flex items-center gap-3">
-          <span className="flex items-center gap-2 text-sm">
-            <span className="w-2 h-2 rounded-full bg-gh-success animate-pulse-slow" />
-            Live
-          </span>
-        </div>
+        <LiveIndicator org={org} />
       </div>
 
       {/* Stats bar */}
