@@ -1,7 +1,7 @@
 import { TimeSlider } from "@/components/TimeSlider";
-import { RunList } from "@/components/RunList";
 import { StatsBar } from "@/components/StatsBar";
 import { LiveIndicator } from "@/components/LiveIndicator";
+import { DashboardWithFilters } from "@/components/DashboardWithFilters";
 
 interface OrgDashboardProps {
   params: Promise<{ org: string }>;
@@ -30,8 +30,8 @@ export default async function OrgDashboard({ params }: OrgDashboardProps) {
       {/* Time slider */}
       <TimeSlider />
 
-      {/* Run list */}
-      <RunList org={org} />
+      {/* Filter bar + Run list + Pagination */}
+      <DashboardWithFilters org={org} />
     </div>
   );
 }

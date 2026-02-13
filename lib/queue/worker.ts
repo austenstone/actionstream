@@ -49,6 +49,8 @@ async function processWorkflowRun(payload: Record<string, unknown>) {
     ? repoFullName.split("/")
     : ["unknown", "unknown"];
 
+  const actor = (run.actor as Record<string, unknown>)?.login as string | null;
+
   const workflowRun = await prisma.workflowRun.upsert({
     where: { id: BigInt(run.id as number) },
     create: {
@@ -62,6 +64,7 @@ async function processWorkflowRun(payload: Record<string, unknown>) {
       event: run.event as string | null,
       status: run.status as string,
       conclusion: run.conclusion as string | null,
+      actor,
       runNumber: (run.run_number as number) || 0,
       runAttempt: (run.run_attempt as number) || 1,
       htmlUrl: run.html_url as string | null,
@@ -72,6 +75,7 @@ async function processWorkflowRun(payload: Record<string, unknown>) {
     update: {
       status: run.status as string,
       conclusion: run.conclusion as string | null,
+      actor,
       completedAt: run.updated_at ? new Date(run.updated_at as string) : null,
       rawPayload: payload,
     },
@@ -98,6 +102,7 @@ async function processWorkflowRun(payload: Record<string, unknown>) {
       repo: workflowRun.repo,
       workflow: workflowRun.workflow,
       headBranch: workflowRun.headBranch,
+      actor: workflowRun.actor,
       status: workflowRun.status as any,
       conclusion: workflowRun.conclusion as any,
       runNumber: workflowRun.runNumber,
@@ -110,7 +115,6 @@ async function processWorkflowRun(payload: Record<string, unknown>) {
       jobCount: workflowRun._count.jobs,
     },
   });
-}
 }
 
 async function processWorkflowJob(payload: Record<string, unknown>) {
@@ -169,7 +173,6 @@ async function processWorkflowJob(payload: Record<string, unknown>) {
       labels: workflowJob.labels,
     },
   });
-}
 }
 
 // --- Redis publisher for real-time events ---

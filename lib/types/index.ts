@@ -27,6 +27,7 @@ export interface WorkflowRunSummary {
   repo: string;
   workflow: string;
   headBranch: string | null;
+  actor: string | null;
   status: RunStatus;
   conclusion: RunConclusion;
   runNumber: number;
@@ -67,6 +68,29 @@ export interface DashboardState {
   org: string | null;
   runs: WorkflowRunSummary[];
   snapshots: TimelineSnapshot[];
+}
+
+// --- Filter & pagination types ---
+
+export interface RunFilters {
+  status?: RunStatus | "";
+  conclusion?: string;
+  repo?: string;
+  actor?: string;
+  branch?: string;
+  search?: string;
+  sort?: "created_at" | "duration" | "status";
+  order?: "asc" | "desc";
+  limit?: number;
+  offset?: number;
+  org?: string;
+}
+
+export interface PaginatedRunsResponse {
+  runs: WorkflowRunSummary[];
+  total: number;
+  offset: number;
+  limit: number;
 }
 
 // --- WebSocket event types ---

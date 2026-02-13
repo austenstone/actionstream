@@ -35,6 +35,7 @@ model WorkflowRun {
   status      String                         // queued, in_progress, completed
   conclusion  String?                        // success, failure, cancelled, skipped, etc.
   runNumber   Int       @map("run_number")
+  actor       String?                        // GitHub username who triggered the run
   runAttempt  Int       @default(1) @map("run_attempt")
   htmlUrl     String?   @map("html_url")
   startedAt   DateTime? @map("started_at")
@@ -49,6 +50,9 @@ model WorkflowRun {
   @@index([startedAt])
   @@index([completedAt])
   @@index([org, startedAt])
+  @@index([actor])
+  @@index([headBranch])
+  @@index([conclusion])
   @@map("workflow_runs")
 }
 
